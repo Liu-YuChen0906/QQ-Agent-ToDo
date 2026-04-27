@@ -1,4 +1,4 @@
-// QQ Chat Types - Extensible for future features
+﻿// QQ Chat Types - Extensible for future features
 
 export interface ChatItem {
   id: string
@@ -12,8 +12,15 @@ export interface ChatItem {
   badges?: string[] // For emoji badges like in group chats
   memberCount?: number // For group chats
   messages?: Message[]
-  isMutedAll?: boolean // 全员禁言
+  isMutedAll?: boolean // 鍏ㄥ憳绂佽█
   isBot?: boolean // For AI agent/bot chats
+}
+
+export interface TaskCardSource {
+  chatName: string
+  chatAvatar: string
+  senderName: string
+  senderAvatar: string
 }
 
 export interface TaskCard {
@@ -21,6 +28,7 @@ export interface TaskCard {
   deadline: string
   deadlineTimestamp: number // Unix timestamp for countdown
   steps: string[]
+  source?: TaskCardSource
 }
 
 export interface Message {
@@ -67,3 +75,4 @@ export interface DeviceLogin {
   type: 'windows' | 'mac' | 'mobile'
   isActive: boolean
 }
+

@@ -5,7 +5,19 @@ export interface AgentTaskCardRequest {
   message: Pick<Message, 'id' | 'senderName' | 'content' | 'timestamp' | 'type'>
 }
 
-export interface AgentTaskCardResponse {
+export interface AgentTaskCardSuccessResponse {
   provider: 'llm' | 'fallback'
+  shouldCreateTask: true
   taskCard: TaskCard
 }
+
+export interface AgentTaskCardRejectedResponse {
+  provider: 'llm' | 'fallback'
+  shouldCreateTask: false
+  responsePrompt: string
+  suggestions: string[]
+}
+
+export type AgentTaskCardResponse =
+  | AgentTaskCardSuccessResponse
+  | AgentTaskCardRejectedResponse

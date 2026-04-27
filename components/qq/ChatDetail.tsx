@@ -101,6 +101,7 @@ function useCountdown(targetTimestamp: number) {
 
 function TaskCardComponent({ taskCard }: { taskCard: TaskCard }) {
   const timeLeft = useCountdown(taskCard.deadlineTimestamp)
+  const source = taskCard.source
 
   return (
     <div className="bg-zinc-800 rounded-2xl overflow-hidden max-w-[300px] shadow-lg">
@@ -114,11 +115,11 @@ function TaskCardComponent({ taskCard }: { taskCard: TaskCard }) {
       </div>
 
       <div className="p-4">
-        <h3 className="text-foreground font-semibold text-base mb-3 leading-snug">
+        <h3 className="text-foreground font-semibold text-lg leading-snug line-clamp-2">
           {taskCard.title}
         </h3>
 
-        <div className="flex items-center justify-between mb-4 p-2 bg-zinc-700/50 rounded-lg gap-3">
+        <div className="mt-3 flex items-center justify-between p-2 bg-zinc-700/50 rounded-lg gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <Clock className="w-4 h-4 text-zinc-400 flex-shrink-0" />
             <span className="text-zinc-300 text-sm truncate">{taskCard.deadline}</span>
@@ -128,19 +129,43 @@ function TaskCardComponent({ taskCard }: { taskCard: TaskCard }) {
           </div>
         </div>
 
-        <div className="space-y-2 mb-4">
-          <p className="text-zinc-400 text-xs font-medium uppercase tracking-wider">任务清单</p>
-          {taskCard.steps.map((step, index) => (
-            <div key={index} className="flex items-start gap-2">
-              <div className="w-5 h-5 rounded-full border border-zinc-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-zinc-400 text-xs">{index + 1}</span>
-              </div>
-              <span className="text-zinc-300 text-sm leading-relaxed">{step}</span>
-            </div>
-          ))}
-        </div>
+        {source && (
+          <div className="mt-3 rounded-xl border border-zinc-700/80 bg-zinc-900/40 p-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-zinc-500 mb-3">
+              来源
+            </p>
 
-        <div className="flex gap-2 pt-2 border-t border-zinc-700">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-9 w-9 flex-shrink-0 border border-zinc-700">
+                  <AvatarImage src={source.chatAvatar} alt={source.chatName} />
+                  <AvatarFallback className="bg-blue-600 text-white text-xs">
+                    群
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-zinc-100 truncate">{source.chatName}</p>
+                  <p className="text-xs text-zinc-400">来源群</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Avatar className="h-9 w-9 flex-shrink-0 border border-zinc-700">
+                  <AvatarImage src={source.senderAvatar} alt={source.senderName} />
+                  <AvatarFallback className="bg-zinc-600 text-white text-xs">
+                    人
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-zinc-100 truncate">{source.senderName}</p>
+                  <p className="text-xs text-zinc-400">来源用户</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-3 mt-3 border-t border-zinc-700">
           <button className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors">
             <Calendar className="w-4 h-4" />
             存入日历
@@ -154,26 +179,30 @@ function TaskCardComponent({ taskCard }: { taskCard: TaskCard }) {
     </div>
   )
 }
-
 function AgentFeedbackToast({
   state,
 }: {
-  state: 'sending' | 'success' | 'error' | null
+  state: {
+    kind: 'sending' | 'success' | 'reject' | 'error'
+    subtitle?: string
+  } | null
 }) {
   if (!state) return null
 
   const copy =
-    state === 'sending'
-      ? { title: '已发送给 QQ Agent', subtitle: '正在整理为任务卡片', Icon: Loader2 }
-      : state === 'success'
-        ? { title: '任务卡已生成', subtitle: '正在打开 QQ Agent 对话', Icon: CheckCircle2 }
-        : { title: '发送失败', subtitle: '请稍后再试', Icon: CheckCircle2 }
+    state.kind === 'sending'
+      ? { title: 'QQ Agent 正在看', subtitle: state.subtitle ?? '判断是不是待办', Icon: Loader2 }
+      : state.kind === 'success'
+        ? { title: '任务卡已生成', subtitle: state.subtitle ?? '已转到 QQ Agent', Icon: CheckCircle2 }
+        : state.kind === 'reject'
+          ? { title: '不是待办', subtitle: state.subtitle ?? '补个动作和时间再试', Icon: Bot }
+          : { title: '发送失败', subtitle: state.subtitle ?? '请稍后再试', Icon: CheckCircle2 }
 
   return (
     <div className="fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 pointer-events-none">
       <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-white/10 bg-zinc-900/95 px-4 py-3 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/15 text-blue-300">
-          <copy.Icon className={`h-5 w-5 ${state === 'sending' ? 'animate-spin' : ''}`} />
+          <copy.Icon className={`h-5 w-5 ${state.kind === 'sending' ? 'animate-spin' : ''}`} />
         </div>
         <div className="min-w-0">
           <p className="text-sm font-medium text-white">{copy.title}</p>
@@ -183,7 +212,6 @@ function AgentFeedbackToast({
     </div>
   )
 }
-
 function TencentDocsIcon() {
   return (
     <div className="w-12 h-12 bg-[#00a854] rounded-lg flex items-center justify-center">
@@ -531,7 +559,10 @@ function ContextMenu({
 export function ChatDetail({ chat, onBack, onAddTaskFromMessage }: ChatDetailProps) {
   const [message, setMessage] = useState('')
   const [isCreatingTask, setIsCreatingTask] = useState(false)
-  const [agentToast, setAgentToast] = useState<'sending' | 'success' | 'error' | null>(null)
+  const [agentToast, setAgentToast] = useState<{
+    kind: 'sending' | 'success' | 'reject' | 'error'
+    subtitle?: string
+  } | null>(null)
   const [contextMenu, setContextMenu] = useState<{
     isOpen: boolean
     position: { x: number; y: number }
@@ -547,6 +578,25 @@ export function ChatDetail({ chat, onBack, onAddTaskFromMessage }: ChatDetailPro
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!agentToast) return
+
+    const duration =
+      agentToast.kind === 'sending'
+        ? 1200
+        : agentToast.kind === 'success'
+          ? 900
+          : agentToast.kind === 'reject'
+            ? 2200
+            : 1600
+
+    const timer = window.setTimeout(() => {
+      setAgentToast(null)
+    }, duration)
+
+    return () => window.clearTimeout(timer)
+  }, [agentToast])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -598,7 +648,10 @@ export function ChatDetail({ chat, onBack, onAddTaskFromMessage }: ChatDetailPro
           }
 
           setIsCreatingTask(true)
-          setAgentToast('sending')
+          setAgentToast({
+            kind: 'sending',
+            subtitle: '正在判断是否为待办事项',
+          })
 
           try {
             const agentInput =
@@ -634,6 +687,15 @@ export function ChatDetail({ chat, onBack, onAddTaskFromMessage }: ChatDetailPro
               throw new Error(data.error || '任务卡生成失败')
             }
 
+            if (!data.shouldCreateTask) {
+              setAgentToast({
+                kind: 'reject',
+                subtitle: data.responsePrompt,
+              })
+              setIsCreatingTask(false)
+              break
+            }
+
             const taskMessage: Message = {
               id: `task-${selectedMessage.id}-${Date.now()}`,
               senderId: 'robot',
@@ -642,10 +704,21 @@ export function ChatDetail({ chat, onBack, onAddTaskFromMessage }: ChatDetailPro
               content: '',
               timestamp: '刚刚',
               type: 'taskCard',
-              taskCard: data.taskCard,
+              taskCard: {
+                ...data.taskCard,
+                source: {
+                  chatName: chat.name,
+                  chatAvatar: chat.avatar,
+                  senderName: selectedMessage.senderName,
+                  senderAvatar: selectedMessage.senderAvatar,
+                },
+              },
             }
 
-            setAgentToast('success')
+            setAgentToast({
+              kind: 'success',
+              subtitle: '正在打开 QQ Agent 对话',
+            })
             setIsCreatingTask(false)
 
             switchTimerRef.current = window.setTimeout(() => {
@@ -653,9 +726,11 @@ export function ChatDetail({ chat, onBack, onAddTaskFromMessage }: ChatDetailPro
             }, 650)
           } catch (error) {
             console.error('[agent] generate task card failed:', error)
-            setAgentToast('error')
+            setAgentToast({
+              kind: 'error',
+              subtitle: '请稍后再试',
+            })
             setIsCreatingTask(false)
-            window.setTimeout(() => setAgentToast(null), 1400)
           }
           break
         default:
@@ -802,6 +877,16 @@ export function ChatDetail({ chat, onBack, onAddTaskFromMessage }: ChatDetailPro
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

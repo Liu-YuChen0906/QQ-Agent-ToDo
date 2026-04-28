@@ -27,8 +27,8 @@ const TodoSchema = z.object({
   responsePrompt: z.string().min(1),
   suggestions: z.array(z.string().min(1)).min(1).max(4),
   taskName: z.string().min(1),
-  deadlineText: z.string().min(1),
-  deadlineISO: z.string().min(1),
+  deadlineText: z.string().optional().nullable(),
+  deadlineISO: z.string().optional().nullable(),
   steps: z.array(z.string().min(1)).min(1),
 })
 
@@ -62,6 +62,24 @@ function getNowText() {
 
 function normalizeText(value: string) {
   return value.replace(/\s+/g, ' ').trim()
+}
+
+function compactTaskTitle(raw: string) {
+  const normalized = normalizeText(raw)
+  if (!normalized) return '待办任务'
+
+  const firstSentence = normalized.split(/[。！？!?；;\n]/u)[0] || normalized
+  const removedPrefix = firstSentence
+    .replace(/^(@\S+\s*)+/u, '')
+    .replace(/^(请|帮我|麻烦|帮忙|需要|记得|务必|尽快|辛苦|把|将|给我|你去)\s*/u, '')
+    .replace(/(谢谢|收到|哈|啊|呀|啦)$/u, '')
+    .trim()
+
+  const cleaned = removedPrefix.replace(/[，,].*$/u, '').trim()
+  const clipped = cleaned.slice(0, 18).trim()
+
+  if (!clipped) return '待办任务'
+  return /^[\p{L}\p{N}]/u.test(clipped) ? clipped : `处理${clipped}`
 }
 
 function buildFallbackTodoDecision(messageText: string): AgentTaskCardResponse {
@@ -109,20 +127,14 @@ function buildRejectedPrompt(text: string) {
 
 function buildFallbackTaskCard(messageText: string): TaskCard {
   const text = normalizeText(messageText)
-  const taskName =
-    text
-      .replace(/^(请|帮我|麻烦|帮忙|需要|把|将)\s*/u, '')
-      .split(/[。！？!?；;\n]/)[0]
-      ?.slice(0, 24)
-      .trim() || '待办任务'
-
-  const deadlineText = extractDeadlineText(text) || '明天 18:00'
-  const deadlineTimestamp = buildDeadlineTimestamp(deadlineText)
+  const taskName = compactTaskTitle(text)
+  const deadlineText = extractDeadlineText(text)
+  const deadlineTimestamp = deadlineText ? buildDeadlineTimestamp(deadlineText) : null
   const steps = buildFallbackSteps(text)
 
   return {
     title: taskName,
-    deadline: deadlineText,
+    deadline: deadlineText || '未设置截止时间',
     deadlineTimestamp,
     steps,
   }
@@ -130,6 +142,9 @@ function buildFallbackTaskCard(messageText: string): TaskCard {
 
 function extractDeadlineText(text: string) {
   const patterns = [
+    /(今天|明天|后天|今晚|今早|今晨|今晚|明早|明晚)\s*(\d{1,2}:\d{2})?/u,
+    /(本周[一二三四五六日天]?|下周[一二三四五六日天]?|周[一二三四五六日天])\s*(上午|中午|下午|晚上)?\s*(\d{1,2}:\d{2})?/u,
+    /(本月内|月底|月末|本周内|下周内|尽快|有空时|下班前|今天内)/u,
     /今天\s*\d{1,2}:\d{2}/u,
     /明天\s*\d{1,2}:\d{2}/u,
     /后天\s*\d{1,2}:\d{2}/u,
@@ -164,8 +179,24 @@ function buildDeadlineTimestamp(deadlineText: string) {
   }
 
   const timeMatch = deadlineText.match(/(\d{1,2}):(\d{2})/u)
-  const hour = timeMatch ? Number(timeMatch[1]) : 18
-  const minute = timeMatch ? Number(timeMatch[2]) : 0
+  let hour = timeMatch ? Number(timeMatch[1]) : 0
+  let minute = timeMatch ? Number(timeMatch[2]) : 0
+
+  if (!timeMatch) {
+    if (/今晚|明晚|晚上/u.test(deadlineText)) {
+      hour = 21
+    } else if (/下午/u.test(deadlineText)) {
+      hour = 15
+    } else if (/中午/u.test(deadlineText)) {
+      hour = 12
+    } else if (/今早|今晨|明早|上午/u.test(deadlineText)) {
+      hour = 9
+    } else if (/下班前/u.test(deadlineText)) {
+      hour = 18
+    } else {
+      return null
+    }
+  }
   deadline.setHours(hour, minute, 0, 0)
 
   if (deadline.getTime() <= now.getTime()) {
@@ -220,17 +251,21 @@ function parseModelResponse(outputText: string): AgentTaskCardResponse {
     return rejected
   }
 
-  const deadlineTimestamp = Date.parse(parsed.deadlineISO)
-  if (!Number.isFinite(deadlineTimestamp)) {
-    throw new Error('LLM returned an invalid deadlineISO value')
-  }
+  const normalizedTaskName = compactTaskTitle(parsed.taskName)
+  const normalizedDeadlineText = normalizeText(parsed.deadlineText || '')
+  const llmDeadlineTimestamp = parsed.deadlineISO ? Date.parse(parsed.deadlineISO) : Number.NaN
+  const deadlineTimestamp = Number.isFinite(llmDeadlineTimestamp)
+    ? llmDeadlineTimestamp
+    : normalizedDeadlineText
+      ? buildDeadlineTimestamp(normalizedDeadlineText)
+      : null
 
   const success: AgentTaskCardSuccessResponse = {
     provider: 'llm',
     shouldCreateTask: true,
     taskCard: {
-      title: parsed.taskName.trim(),
-      deadline: parsed.deadlineText.trim(),
+      title: normalizedTaskName,
+      deadline: normalizedDeadlineText || '未设置截止时间',
       deadlineTimestamp,
       steps: parsed.steps.map((item) => item.trim()).filter(Boolean),
     },
@@ -255,15 +290,16 @@ async function generateWithTencentLLM(
     '你是一个待办判断和任务抽取 Agent。',
     '先判断用户消息是否是待办事项。只有在包含明确行动、交付物、负责人、截止时间或任务意图时，才认为是待办。',
     '如果不是待办事项，必须输出 shouldCreateTask=false，并给出一句非常简短的 responsePrompt 和 2-4 条 suggestions。',
-    '如果是待办事项，必须输出 shouldCreateTask=true，并给出结构化任务卡片信息，taskName 要凝练成一句话或短语，不要复述整段原消息。',
+    '如果是待办事项，必须输出 shouldCreateTask=true，并给出结构化任务卡片信息。',
+    'taskName 必须是凝练短语（建议 6-16 个字），禁止直接照抄整句聊天消息，优先使用“动词+对象”的标题。',
     '只输出 JSON 对象，不要输出解释、不要输出 markdown。',
     '字段要求：',
     '- shouldCreateTask：布尔值',
     '- responsePrompt：一句非常简短的提示语',
     '- suggestions：提示建议数组',
     '- taskName：自动提取最适合作为任务标题的一句话或短语，要凝练，不要复述原消息',
-    '- deadlineText：识别出的 DDL，尽量保留原始表达，如“明天 15:00”',
-    '- deadlineISO：把 deadlineText 解析成 ISO 8601，使用 Asia/Shanghai 时区',
+    '- deadlineText：识别出的 DDL，尽量保留原始表达，如“明天 15:00”；若无法识别则留空字符串',
+    '- deadlineISO：把 deadlineText 解析成 ISO 8601，使用 Asia/Shanghai 时区；若无法识别则留空字符串',
     '- steps：拆解为 3-7 条可执行步骤',
     '',
     `消息来自：${requestData.chat.name}`,

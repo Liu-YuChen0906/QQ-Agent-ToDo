@@ -61,10 +61,15 @@ const MENU_ACTIONS_ROW2 = [
   { icon: Bot, label: '加入待办', action: 'aiTodo', highlight: true },
 ]
 
-function useCountdown(targetTimestamp: number) {
+function useCountdown(targetTimestamp: number | null) {
   const [timeLeft, setTimeLeft] = useState('')
 
   useEffect(() => {
+    if (!targetTimestamp) {
+      setTimeLeft('未设置')
+      return
+    }
+
     const calculateTimeLeft = () => {
       const diff = targetTimestamp - Date.now()
 
@@ -124,9 +129,15 @@ function TaskCardComponent({ taskCard }: { taskCard: TaskCard }) {
             <Clock className="w-4 h-4 text-zinc-400 flex-shrink-0" />
             <span className="text-zinc-300 text-sm truncate">{taskCard.deadline}</span>
           </div>
-          <div className="px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400 flex-shrink-0">
-            剩余 {timeLeft}
-          </div>
+          {taskCard.deadlineTimestamp ? (
+            <div className="px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-400 flex-shrink-0">
+              剩余 {timeLeft}
+            </div>
+          ) : (
+            <div className="px-2 py-0.5 rounded text-xs font-medium bg-zinc-600/40 text-zinc-300 flex-shrink-0">
+              暂无倒计时
+            </div>
+          )}
         </div>
 
         {source && (

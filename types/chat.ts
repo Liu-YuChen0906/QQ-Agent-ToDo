@@ -26,7 +26,7 @@ export interface TaskCardSource {
 export interface TaskCard {
   title: string
   deadline: string
-  deadlineTimestamp: number // Unix timestamp for countdown
+  deadlineTimestamp: number | null // Unix timestamp for countdown, null means unknown deadline
   steps: string[]
   source?: TaskCardSource
 }
